@@ -221,7 +221,7 @@ class ConflictDecorationPluginValue {
       // Remote content widget (shown after local content)
       decorationRanges.push(
         Decoration.widget({
-          widget: new ConflictRemoteContentWidget(conflict.remoteContent, conflict.index),
+          widget: new ConflictRemoteContentWidget(conflict.theirsContent, conflict.index),
           block: true,
           side: 1,
         }).range(localEnd)
