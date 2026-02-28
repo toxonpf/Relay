@@ -25,7 +25,7 @@ export const FeatureFlagDefaults: FeatureFlags = {
 	enableDocumentHistory: false,
 	enableEditorTweens: false,
 	enableNetworkLogging: false,
-	enableCanvasSync: false,
+	enableCanvasSync: true,
 	enableVerifyUploads: false,
 	enableAutomaticDiffResolution: true,
 	enableDiscordLogin: false,
