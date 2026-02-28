@@ -9,10 +9,8 @@ import {
 	type Role,
 	type RemoteSharedFolder as RemoteFolder,
 	type RelayUser,
-	type RelaySubscription,
-	type RemoteSharedFolder,
-	type StorageQuota,
 	type Provider,
+	type RemoteSharedFolder,
 	type Permission,
 	type Resource,
 } from "./Relay";
@@ -69,12 +67,9 @@ interface RelayDAO extends RecordModel {
 	name: string;
 	version: number;
 	path: string;
-	user_limit: number;
+
 	creator: string;
-	cta: string;
-	plan: string;
 	provider?: string;
-	storage_quota: string;
 }
 
 interface ProviderDAO extends RecordModel {
@@ -110,16 +105,6 @@ interface FolderRoleDAO extends RecordModel {
 	shared_folder: string;
 }
 
-export interface StorageQuotaDAO extends RecordModel {
-	id: string;
-	name: string;
-	updated: string;
-	created: string;
-	quota: number;
-	usage: number;
-	metered: boolean;
-	max_file_size: number;
-}
 
 interface RelayInvitationDAO extends RecordModel {
 	id: string;
@@ -191,118 +176,6 @@ class Auto implements hasRoot, hasPermissionParents {
 
 	public get permissionParents(): [string, string][] {
 		return [];
-	}
-}
-
-class StorageQuotaAuto
-	extends Observable<StorageQuota>
-	implements StorageQuota
-{
-	public offRecordSubscription?: Unsubscriber;
-
-	constructor(
-		private storageQuota: StorageQuotaDAO,
-		private relays: ObservableMap<string, Relay>,
-	) {
-		super();
-	}
-
-	update(update: StorageQuotaDAO): StorageQuota {
-		this.storageQuota = update;
-		return this;
-	}
-
-	public get name() {
-		return this.storageQuota.name;
-	}
-
-	public get id() {
-		return this.storageQuota.id;
-	}
-
-	public get quota() {
-		return this.storageQuota.quota;
-	}
-
-	public get pending() {
-		return this.storageQuota.pending;
-	}
-
-	public get usage(): number {
-		return this.storageQuota.usage;
-	}
-
-	public get maxFileSize(): number {
-		return this.storageQuota.max_file_size;
-	}
-
-	public get metered(): boolean {
-		return this.storageQuota.metered;
-	}
-
-	public get updated(): string {
-		return this.storageQuota.updated;
-	}
-
-	public get created(): string {
-		return this.storageQuota.created;
-	}
-
-	public get aggregate_root() {
-		return [
-			"relays",
-			this.relays.find((relay) => relay.storageQuotaId === this.storageQuota.id)
-				?.id,
-		];
-	}
-}
-
-class StorageQuotaCollection
-	implements Collection<StorageQuotaDAO, StorageQuota>
-{
-	collectionName: string = "storage_quotas";
-
-	constructor(
-		private subscribeRecord: (
-			collectionName: string,
-			recordId: string,
-			expand: string[],
-		) => Promise<Unsubscriber | undefined>,
-		public storageQuota: ObservableMap<string, StorageQuota>,
-		private relays: ObservableMap<string, Relay>,
-	) {}
-
-	items(): StorageQuota[] {
-		return this.storageQuota.values();
-	}
-
-	clear() {
-		this.storageQuota.clear();
-	}
-
-	get(id: string) {
-		return this.storageQuota.get(id);
-	}
-
-	ingest(update: StorageQuotaDAO): StorageQuota {
-		const existingStorageQuota = this.storageQuota.get(update.id);
-		if (existingStorageQuota) {
-			existingStorageQuota.update(update);
-			this.storageQuota.notifyListeners();
-			return existingStorageQuota;
-		}
-		const storageQuota = new StorageQuotaAuto(update, this.relays);
-		this.subscribeRecord(this.collectionName, update.id, []).then((unsub) => {
-			storageQuota.offRecordSubscription = unsub;
-		});
-		this.storageQuota.set(update.id, storageQuota);
-		return storageQuota;
-	}
-
-	delete(id: string) {
-		const quota = this.storageQuota.get<StorageQuotaAuto>(id);
-		quota?.offRecordSubscription?.();
-		this.storageQuota.delete(id);
 	}
 }
 
@@ -582,8 +455,6 @@ class RelayCollection implements Collection<RelayDAO, Relay> {
 		private relayRoles: ObservableMap<string, RelayRole>,
 		private relayInvitations: ObservableMap<string, RelayInvitation>,
 		private remoteFolders: ObservableMap<string, RemoteFolder>,
-		private subscriptions: ObservableMap<string, RelaySubscription>,
-		private storageQuotas: ObservableMap<string, StorageQuota>,
 		private providers: ObservableMap<string, Provider>,
 		private user: RelayUser,
 	) {}
@@ -612,8 +483,6 @@ class RelayCollection implements Collection<RelayDAO, Relay> {
 			this.relayRoles,
 			this.relayInvitations,
 			this.remoteFolders,
-			this.subscriptions,
-			this.storageQuotas,
 			this.providers,
 			this.user,
 		);
@@ -803,49 +672,6 @@ class UserCollection implements Collection<UserDAO, RelayUser> {
 	}
 }
 
-class RelaySubscriptionCollection
-	implements Collection<RelaySubscriptionDAO, RelaySubscription>
-{
-	collectionName: string = "subscriptions";
-
-	constructor(
-		private subscriptions: ObservableMap<string, RelaySubscription>,
-		private relays: ObservableMap<string, Relay>,
-		private users: ObservableMap<string, RelayUser>,
-	) {}
-
-	items(): RelaySubscription[] {
-		return this.subscriptions.values();
-	}
-
-	clear(): void {
-		this.subscriptions.clear();
-	}
-
-	get(id: string) {
-		return this.subscriptions.get(id);
-	}
-
-	ingest(update: RelaySubscriptionDAO): RelaySubscription {
-		const existingsubscription = this.subscriptions.get(update.id);
-		if (existingsubscription) {
-			existingsubscription.update(update);
-			this.subscriptions.notifyListeners();
-			return existingsubscription;
-		}
-		const subscription = new RelaySubscriptionAuto(
-			update,
-			this.relays,
-			this.users,
-		);
-		this.subscriptions.set(update.id, subscription);
-		return subscription;
-	}
-
-	delete(id: string) {
-		this.subscriptions.delete(id);
-	}
-}
 
 class Store extends HasLogging {
 	collections: Map<string, Collection<unknown, unknown>>;
@@ -1240,88 +1066,6 @@ class RelayInvitationAuto implements RelayInvitation {
 	}
 }
 
-interface RelaySubscriptionDAO extends RecordModel {
-	id: string;
-	active: boolean;
-	user: string;
-	relay: string;
-	stripe_cancel_at: number;
-	stripe_quantity: number;
-	token: string;
-}
-
-export class RelaySubscriptionAuto
-	extends Observable<RelaySubscription>
-	implements RelaySubscription
-{
-	constructor(
-		private subscription: RelaySubscriptionDAO,
-		private relays: ObservableMap<string, Relay>,
-		private users: ObservableMap<string, RelayUser>,
-	) {
-		super();
-	}
-
-	update(subscription: RelaySubscriptionDAO): RelaySubscription {
-		this.subscription = subscription;
-		this.notifyListeners();
-		return this;
-	}
-
-	public get id() {
-		return this.subscription.id;
-	}
-
-	public get token() {
-		return this.subscription.token;
-	}
-
-	public get active() {
-		return this.subscription.active;
-	}
-
-	public get user(): RelayUser {
-		const user = this.users.get(this.subscription.user);
-		if (!user) {
-			throw new Error("invalid subscription");
-		}
-		return user;
-	}
-
-	public get relayId() {
-		return this.subscription.relay;
-	}
-
-	public get relay(): Relay {
-		const relay = this.relays.get(this.subscription.relay);
-		if (!relay) {
-			throw new Error("invalid subscription");
-		}
-		return relay;
-	}
-
-	public get stripe_cancel_at() {
-		return this.subscription.stripe_cancel_at;
-	}
-
-	public get cancelAt(): Date | null {
-		return this.subscription.stripe_cancel_at !== 0
-			? new Date(this.subscription.stripe_cancel_at * 1000)
-			: null;
-	}
-
-	public get quantity() {
-		return this.subscription.stripe_quantity;
-	}
-
-	public get aggregate_root() {
-		return ["relays", this.subscription.relay];
-	}
-
-	public get permissionParents(): [string, string][] {
-		return [["users", this.subscription.user]];
-	}
-}
 
 class RelayAuto
 	extends Observable<Relay>
@@ -1332,8 +1076,6 @@ class RelayAuto
 		private relayRoles: ObservableMap<string, RelayRole>,
 		private relayInvitations: ObservableMap<string, RelayInvitation>,
 		private remoteFolders: ObservableMap<string, RemoteFolder>,
-		private _subscriptions: ObservableMap<string, RelaySubscription>,
-		private storageQuotas: ObservableMap<string, StorageQuota>,
 		private providers: ObservableMap<string, Provider>,
 		private user: RelayUser,
 	) {
@@ -1344,14 +1086,6 @@ class RelayAuto
 		this.relay = update;
 		this.notifyListeners();
 		return this;
-	}
-
-	public get cta() {
-		return this.relay.cta;
-	}
-
-	public get plan() {
-		return this.relay.plan;
 	}
 
 	public get id() {
@@ -1374,9 +1108,7 @@ class RelayAuto
 		return this.relay.version;
 	}
 
-	public get userLimit() {
-		return this.relay.user_limit;
-	}
+
 
 	public get role(): Role {
 		const isCreator = this.relay.creator === this.user.id;
@@ -1400,28 +1132,12 @@ class RelayAuto
 		);
 	}
 
-	public get storageQuota(): StorageQuota | undefined {
-		return this.storageQuotas.find(
-			(storageQuota) => storageQuota.id === this.relay.storage_quota,
-		);
-	}
-
-	public get storageQuotaId(): string {
-		return this.relay.storage_quota;
-	}
-
 	public get folders(): ObservableMap<string, RemoteFolder> {
 		return this.remoteFolders.filter((folder) => {
 			const onRelay = folder.relayId === this.id;
 			const hasPermissionParents = folder.permissionParents.length > 0;
 			return onRelay && hasPermissionParents;
 		});
-	}
-
-	public get subscriptions(): ObservableMap<string, RelaySubscription> {
-		return this._subscriptions.filter(
-			(subscription) => subscription.relayId === this.id,
-		);
 	}
 
 	public get permissionParents(): [string, string][] {
@@ -1454,8 +1170,6 @@ export class RelayManager extends HasLogging {
 	users: ObservableMap<string, RelayUser>;
 	roles: ObservableMap<string, RoleDAO>;
 	remoteFolders: ObservableMap<string, RemoteFolder>;
-	subscriptions: ObservableMap<string, RelaySubscription>;
-	storageQuotas: ObservableMap<string, StorageQuota>;
 	authUser?: AuthModel;
 	user?: RelayUser;
 	store?: Store;
@@ -1489,12 +1203,7 @@ export class RelayManager extends HasLogging {
 			name: "Member",
 			id: "x6lllh2qsf9lxk6",
 		} as RoleDAO);
-		this.subscriptions = new ObservableMap<string, RelaySubscription>(
-			"subscriptions",
-		);
-		this.storageQuotas = new ObservableMap<string, StorageQuota>(
-			"storage quotas",
-		);
+
 
 		// Subscribe to logout/login
 		this._offLoginManager = this.loginManager.on(() => {
@@ -1539,8 +1248,6 @@ export class RelayManager extends HasLogging {
 			this.relayRoles,
 			this.relayInvitations,
 			this.remoteFolders,
-			this.subscriptions,
-			this.storageQuotas,
 			this.providers,
 			this.user,
 		);
@@ -1569,16 +1276,6 @@ export class RelayManager extends HasLogging {
 			this.users,
 			this.user,
 		);
-		const subscriptionCollection = new RelaySubscriptionCollection(
-			this.subscriptions,
-			this.relays,
-			this.users,
-		);
-		const storageQuotaCollection = new StorageQuotaCollection(
-			this.subscribeRecord.bind(this),
-			this.storageQuotas,
-			this.relays,
-		);
 		this.store = new Store([
 			roleCollection,
 			userCollection,
@@ -1587,8 +1284,6 @@ export class RelayManager extends HasLogging {
 			folderRolesCollection,
 			relayInvitationsCollection,
 			sharedFolderCollection,
-			subscriptionCollection,
-			storageQuotaCollection,
 			providerCollection,
 		]);
 
@@ -1609,10 +1304,6 @@ export class RelayManager extends HasLogging {
 				return this.remoteFolders;
 			case "relays":
 				return this.relays;
-			case "storage_quotas":
-				return this.storageQuotas;
-			case "subscriptions":
-				return this.subscriptions;
 			default:
 				console.warn(`Unknown collection name: ${name}`);
 				return undefined;
@@ -1710,19 +1401,6 @@ export class RelayManager extends HasLogging {
 			});
 	}
 
-	async getSubscriptionToken(subscription: RelaySubscription): Promise<string> {
-		if (!this.pb || !this.pb.authStore.isValid) {
-			throw new Error("Auth is not valid");
-		}
-		const url = `/api/subscription/${subscription.id}/token`;
-		const response = await this.pb.send(url, {
-			method: "POST",
-		});
-		if (response !== 200) {
-			throw new Error("Token API failed");
-		}
-		return response.json()["token"];
-	}
 
 	_handleEvent = (
 		collectionName: string,
@@ -1752,9 +1430,6 @@ export class RelayManager extends HasLogging {
 					"relay_invitations_via_relay",
 					"shared_folders_via_relay",
 					"shared_folders_via_relay.creator",
-					"subscriptions_via_relay",
-					"subscriptions_via_relay.relay",
-					"subscriptions_via_relay.relay.storage_quota",
 					"creator",
 				],
 			},
@@ -1763,7 +1438,6 @@ export class RelayManager extends HasLogging {
 			{ name: "relay_roles", expand: ["user", "relay"] },
 			{ name: "shared_folders", expand: ["relay", "creator"] },
 			{ name: "shared_folder_roles", expand: ["user", "shared_folder"] },
-			{ name: "subscriptions", expand: ["user", "relay"] },
 		];
 
 		for (const collection of collections) {
@@ -1824,7 +1498,7 @@ export class RelayManager extends HasLogging {
 			return Promise.resolve([]);
 		}
 		const record = await this.pb.collection("relays").getOne(relay.id, {
-			expand: "relay_roles_via_relay,shared_folders_via_relay,storage_quota",
+			expand: "relay_roles_via_relay,shared_folders_via_relay",
 		});
 		if (!this.destroyed && this.store) {
 			this.store.ingest(record);
@@ -1857,7 +1531,6 @@ export class RelayManager extends HasLogging {
 				expand: [
 					"relay_roles_via_user",
 					"relay_roles_via_user.relay",
-					"relay_roles_via_user.relay.storage_quota",
 					"relay_roles_via_user.role",
 				].join(","),
 			})),
@@ -1871,9 +1544,6 @@ export class RelayManager extends HasLogging {
 			}),
 			withPb("shared_folder_roles", {
 				expand: "user,role",
-			}),
-			withPb("subscriptions", {
-				expand: "relay,user",
 			}),
 		];
 		promises.forEach(async (promise) => {
@@ -1919,7 +1589,7 @@ export class RelayManager extends HasLogging {
 			},
 			{
 				expand:
-					"relay_roles_via_relay,relay_invitations_via_relay,storage_quota",
+					"relay_roles_via_relay,relay_invitations_via_relay",
 			},
 		);
 		if (!record) {
@@ -2161,7 +1831,7 @@ export class RelayManager extends HasLogging {
 	can(
 		principal: string,
 		permission: Permission,
-		resource: Relay | RemoteSharedFolder | RelaySubscription,
+		resource: Relay | RemoteSharedFolder,
 		context?: Record<string, any>,
 	): ObservablePermission {
 		if (!this.policyManager) {
@@ -2188,7 +1858,7 @@ export class RelayManager extends HasLogging {
 	 */
 	userCan(
 		permission: Permission,
-		resource: Relay | RemoteSharedFolder | RelaySubscription,
+		resource: Relay | RemoteSharedFolder,
 		context?: Record<string, any>,
 	): ObservablePermission {
 		if (!this.user) {

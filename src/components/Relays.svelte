@@ -10,7 +10,6 @@
 		hasPermissionParents,
 		type Provider,
 		type Relay,
-		type RelaySubscription,
 		type RemoteSharedFolder,
 	} from "../Relay";
 	import type Live from "src/main";
@@ -28,7 +27,6 @@
 
 	export let plugin: Live;
 	export let relays: ObservableMap<string, Relay>;
-	export let subscriptions: ObservableMap<string, RelaySubscription>;
 
 	const sharedFolders = plugin.sharedFolders;
 
@@ -43,25 +41,6 @@
 			return;
 		}
 		dispatch("manageRelay", { relay });
-	}
-
-	function getActiveForMessage(cancelAtDate: Date | null): string {
-		if (!cancelAtDate) {
-			return "Active";
-		}
-		const now = moment.utc();
-		const cancelAt = moment.utc(cancelAtDate);
-		const daysRemaining = cancelAt.diff(now, "days");
-
-		if (daysRemaining <= 0) {
-			return "Subscription has ended";
-		} else if (daysRemaining === 1) {
-			return "Active for 1 more day";
-		} else if (daysRemaining > 31) {
-			return `Ends on ${cancelAt.format("YYYY-MM-DD")}`;
-		} else {
-			return `Active for ${daysRemaining} more days`;
-		}
 	}
 
 	function handleManageSharedFolder(folder: SharedFolder, relay?: Relay) {
@@ -301,51 +280,6 @@
 		</button>
 	</SlimSettingItem>
 </SettingGroup>
-{#if subscriptions.values().length > 0}
-	<div class="spacer"></div>
-	<SettingItemHeading
-		name="Subscriptions"
-		helpText="Subscriptions are tied to each Relay Server, not to your user account. Modify and cancel your subscription via our payment processor Stripe."
-	></SettingItemHeading>
-	<SettingGroup>
-		{#each $subscriptions.values() as subscription}
-			<SlimSettingItem
-				name=""
-				description={subscription.cancelAt
-					? getActiveForMessage(subscription.cancelAt)
-					: ""}
-			>
-				<Satellite slot="name" relay={subscription.relay} on:manageRelay>
-					{#if subscription.relay.name}
-						{subscription.relay.name}
-					{:else}
-						<span class="faint">(Untitled Relay Server)</span>
-					{/if}
-				</Satellite>
-				<button
-					class="mod-cta system3-button"
-					on:click={debounce(async () => {
-						if (!subscription.token) {
-							const token =
-								await plugin.relayManager.getSubscriptionToken(subscription);
-							subscription.token = token;
-						}
-						const sub_id = subscription.id;
-						const token = subscription.token;
-						window.open(
-							plugin.buildApiUrl(
-								`/subscriptions/${sub_id}/manage?token=${token}`,
-							),
-							"_blank",
-						);
-					})}
-				>
-					Manage
-				</button>
-			</SlimSettingItem>
-		{/each}
-	</SettingGroup>
-{/if}
 
 <style>
 	span.faint {

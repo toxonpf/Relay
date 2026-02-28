@@ -40,8 +40,7 @@ export type Permission =
 	| readonly ["relay", "rename"]
 	| readonly ["relay", "manage_users"]
 	| readonly ["relay", "manage_sharing"]
-	| readonly ["relay", "delete"]
-	| readonly ["subscription", "manage"];
+	| readonly ["relay", "delete"];
 
 export interface RelayUser extends Identified, Updatable<RelayUser> {
 	id: string;
@@ -82,16 +81,11 @@ export interface Relay
 	guid: string;
 	name: string;
 	version: number;
-	userLimit: number;
+
 	role: Role;
 	owner: boolean;
 	invitation?: RelayInvitation;
-	storageQuota?: StorageQuota;
-	storageQuotaId: string;
 	folders: ObservableMap<string, RemoteSharedFolder>;
-	subscriptions: ObservableMap<string, RelaySubscription>;
-	cta: string;
-	plan: string;
 	provider?: Provider;
 	providerId?: string;
 	permissionParents: [string, string][];
@@ -110,16 +104,6 @@ export interface Provider
 	keyId: string;
 }
 
-export interface StorageQuota
-	extends Identified,
-		IObservable<StorageQuota>,
-		Updatable<StorageQuota> {
-	name: string;
-	quota: number;
-	usage: number;
-	maxFileSize: number;
-	metered: boolean;
-}
 
 export interface RelayRole extends Identified, Updatable<RelayRole> {
 	id: string;
@@ -150,19 +134,6 @@ export interface RelayInvitation
 	enabled: boolean;
 }
 
-export interface RelaySubscription
-	extends Identified,
-		Updatable<RelaySubscription>,
-		IObservable<RelaySubscription> {
-	id: string;
-	active: boolean;
-	relay: Relay;
-	relayId: string;
-	user: RelayUser;
-	cancelAt: Date | null;
-	quantity: number;
-	token: string;
-}
 
 export interface FileInfo
 	extends Identified,

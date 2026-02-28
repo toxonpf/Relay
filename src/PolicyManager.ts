@@ -385,13 +385,6 @@ export class PolicyManager implements IPolicyManager {
 					);
 					return !!(folder && relay.id === folder.relayId);
 				},
-				storage_quotas: (quota, request) => {
-					const folder = this.relayManager.remoteFolders.get(
-						this.getResourceId(request.resource),
-					);
-					const relay = folder && this.relayManager.relays.get(folder.relayId);
-					return !!(relay && quota.id === relay.storageQuotaId);
-				},
 			},
 			evaluate: this.evaluateFolderUpload.bind(this),
 		});
@@ -486,18 +479,6 @@ export class PolicyManager implements IPolicyManager {
 			evaluate: this.evaluateRelayManageSharing.bind(this),
 		});
 
-		this.registerPolicy({
-			permission: ["subscription", "manage"],
-			description: "Manage relay subscriptions and plans",
-			dependencies: {
-				relay_roles: (role, request) =>
-					!!(
-						role.relayId === this.getResourceId(request.resource) &&
-						role.userId === request.principal
-					),
-			},
-			evaluate: this.evaluateSubscriptionManage.bind(this),
-		});
 
 		this.registerPolicy({
 			permission: ["folder", "manage_users"],
@@ -659,18 +640,6 @@ export class PolicyManager implements IPolicyManager {
 		return writeRoles.includes(roleName);
 	}
 
-	private hasStorageQuota(folderId: string, fileSize: number): boolean {
-		const folder = this.relayManager.remoteFolders.get(folderId);
-		if (!folder) return false;
-
-		const relay = this.relayManager.relays.get(folder.relayId);
-		if (!relay) return false;
-
-		const storageQuota = relay.storageQuota;
-		if (!storageQuota) return true; // No quota means unlimited
-
-		return storageQuota.usage + fileSize <= storageQuota.quota;
-	}
 
 	// Policy Evaluation Methods
 
@@ -706,11 +675,7 @@ export class PolicyManager implements IPolicyManager {
 
 	private evaluateFolderUpload(request: AuthorizationRequest): boolean {
 		const folderId = this.getResourceId(request.resource);
-		const fileSize = request.context?.fileSize || 0;
-		return (
-			this.hasFolderWriteAccess(request.principal, folderId) &&
-			this.hasStorageQuota(folderId, fileSize)
-		);
+		return this.hasFolderWriteAccess(request.principal, folderId);
 	}
 
 	private evaluateRelayDelete(request: AuthorizationRequest): boolean {
@@ -733,10 +698,6 @@ export class PolicyManager implements IPolicyManager {
 		return this.isRelayOwner(request.principal, relayId);
 	}
 
-	private evaluateSubscriptionManage(request: AuthorizationRequest): boolean {
-		const relayId = this.getResourceId(request.resource);
-		return this.isRelayOwner(request.principal, relayId);
-	}
 
 	private evaluateFolderManageUsers(request: AuthorizationRequest): boolean {
 		const folderId = this.getResourceId(request.resource);

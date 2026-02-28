@@ -7,7 +7,6 @@
 		type Relay,
 		type RelayInvitation,
 		type RelayRole,
-		type RelaySubscription,
 		type RemoteSharedFolder,
 		type Role,
 	} from "src/Relay";
@@ -25,7 +24,6 @@
 	import { uuidv4 } from "lib0/random";
 	import Lock from "./Lock.svelte";
 	import Breadcrumbs from "./Breadcrumbs.svelte";
-	import DiskUsage from "./DiskUsage.svelte";
 	import { ShareFolderModal } from "src/ui/ShareFolderModal";
 	import { AddToVaultModal } from "src/ui/AddToVaultModal";
 	import { FolderSuggestModal } from "src/ui/FolderSuggestModal";
@@ -101,25 +99,6 @@
 		}
 	}
 
-	function getActiveForMessage(cancelAtDate: Date | null): string {
-		if (!cancelAtDate) {
-			return "Active";
-		}
-		const now = moment.utc();
-		const cancelAt = moment.utc(cancelAtDate);
-		const daysRemaining = cancelAt.diff(now, "days");
-
-		if (daysRemaining <= 0) {
-			return "Subscription has ended";
-		} else if (daysRemaining === 1) {
-			return "Active for 1 more day";
-		} else if (daysRemaining > 31) {
-			return `Ends on ${cancelAt.format("YYYY-MM-DD")}`;
-		} else {
-			return `Active for ${daysRemaining} more days`;
-		}
-	}
-
 	function formatBytes(bytes: number, decimals = 2) {
 		if (bytes === 0) return "0 MB";
 
@@ -153,22 +132,6 @@
 		const priority: Record<Role, number> = { Owner: 0, Member: 1, Reader: 2 };
 		return (priority[a.name] ?? 999) - (priority[b.name] ?? 999);
 	}
-
-	const subscriptions = $relay.subscriptions;
-	const subscription = derived($subscriptions, ($subscriptions) => {
-		if ($subscriptions.values().length === 0) {
-			return undefined;
-		}
-		const subscription = $subscriptions.values()[0];
-		if (!subscription.token) {
-			plugin.relayManager.getSubscriptionToken(subscription).then((token) => {
-				subscription.token = token;
-			});
-		}
-		return subscription;
-	});
-
-	const storageQuota = $relay.storageQuota;
 
 	const roles = $relayRoles.filter((role: RelayRole) => {
 		return role.relayId === relay.id;
@@ -235,40 +198,6 @@
 			fetchRelayConfig();
 		}
 	});
-
-	async function handleUpgrade(relay: Relay) {
-		if (!plugin.loginManager?.user) {
-			return;
-		}
-		const payload = {
-			relay: relay.id,
-			quantity: 10,
-			user_email: plugin.loginManager.user.email,
-		};
-		const encodedPayload = btoa(JSON.stringify(payload))
-			.replace(/\+/g, "-")
-			.replace(/\//g, "_")
-			.replace(/=+$/, "");
-		window.open(plugin.buildApiUrl(`/subscribe/${encodedPayload}`), "_blank");
-	}
-
-	async function handleManage(subscription: RelaySubscription) {
-		const token = subscription.token;
-		const sub_id = subscription.id;
-		window.open(
-			plugin.buildApiUrl(`/subscriptions/${sub_id}/manage?token=${token}`),
-			"_blank",
-		);
-	}
-
-	async function handleCancel(subscription: RelaySubscription) {
-		const token = subscription.token;
-		const sub_id = subscription.id;
-		window.open(
-			plugin.buildApiUrl(`/subscriptions/${sub_id}/cancel?token=${token}`),
-			"_blank",
-		);
-	}
 
 	function handleKeyToggle(checked: boolean) {
 		if ($canManageSharing) {
@@ -412,11 +341,6 @@
 		["relay", "delete"],
 		relay,
 	);
-	const canManageSubscription = plugin.relayManager.userCan(
-		["subscription", "manage"],
-		relay,
-	);
-
 	function onChoose(folderPath: string): Promise<SharedFolder>;
 	function onChoose(
 		folderPath: string,
@@ -704,11 +628,6 @@
 		</AccountSettingItem>
 	{/each}
 
-	<SettingItem description="" name="">
-		<span class="faint"
-			>{$roles.values().length} of {$relay.userLimit} seats used
-		</span>
-	</SettingItem>
 </SettingGroup>
 
 <!--
@@ -808,95 +727,6 @@
 		{/if}
 	{/if}
 </SettingGroup>
-{#if $canManageSubscription}
-	<SettingItemHeading name="Plan" />
-	<SettingGroup>
-		{#if $subscription}
-			<SettingItem name={`Plan: ${$relay.plan}`} description="">
-				<fragment slot="description">
-					{$relay.cta}
-				</fragment>
-				<button
-					on:click={debounce(() => {
-						handleManage($subscription);
-					})}
-				>
-					Manage
-				</button>
-
-				{#if $subscriptions.values()[0].active && !$subscriptions.values()[0].cancelAt}
-					<button
-						class="mod-destructive"
-						on:click={debounce(() => {
-							handleCancel($subscription);
-						})}
-					>
-						Cancel
-					</button>
-				{/if}
-			</SettingItem>
-			{#if !$subscriptions.values()[0].active || $subscriptions.values()[0].cancelAt}
-				<SettingItem description="">
-					<span slot="name" class="mod-warning">Status: Cancelled</span>
-					{getActiveForMessage($subscriptions.values()[0].cancelAt)}
-				</SettingItem>
-			{/if}
-		{:else}
-			<SettingItem
-				name={`Plan: ${$relay.plan}`}
-				description={$relay.cta || "Thanks for supporting Relay development"}
-			>
-				<button
-					class="mod-cta"
-					on:click={debounce(() => {
-						handleUpgrade($relay);
-					})}
-				>
-					Upgrade
-				</button>
-			</SettingItem>
-		{/if}
-	</SettingGroup>
-	{#if $storageQuota && $storageQuota.quota > 0}
-		<SettingItemHeading name="Storage"></SettingItemHeading>
-		<SettingGroup>
-			{#if $storageQuota.metered}
-				<DiskUsage
-					diskUsagePercentage={Math.round(
-						($storageQuota.usage * 100) / $storageQuota.quota,
-					)}
-				/>
-				<SlimSettingItem
-					name="Usage"
-					description="Storage for images, audio, video, etc"
-				>
-					{formatBytes($storageQuota.usage)}
-				</SlimSettingItem>
-
-				<SlimSettingItem
-					name="Total storage"
-					description="Total available storage."
-				>
-					{formatBytes($storageQuota.quota)}
-				</SlimSettingItem>
-			{:else}
-				<SlimSettingItem
-					name="Total storage"
-					description="Total available storage."
-				>
-					Unmetered by Relay
-				</SlimSettingItem>
-			{/if}
-
-			<SlimSettingItem
-				name="File size limit"
-				description="Maximum supported file size."
-			>
-				{formatBytes($storageQuota.maxFileSize)}
-			</SlimSettingItem>
-		</SettingGroup>
-	{/if}
-
 	{#if relay.provider && relay.provider.selfHosted}
 		<SettingItemHeading name="Host"></SettingItemHeading>
 		<SettingGroup>
@@ -938,7 +768,6 @@
 			{/if}
 		</SettingGroup>
 	{/if}
-{/if}
 
 {#if !$relay.owner || $relayRoles
 		.filter((role) => role.role === "Owner" && role.relayId === relay.id)
@@ -968,19 +797,9 @@
 			name="Destroy Relay Server"
 			description="This will destroy the Relay Server (deleting all data on the server). Local data is preserved."
 		>
-			{#if $subscriptions.values().length > 0 && !$subscriptions.values()[0].cancelAt}
-				<button
-					disabled={true}
-					class="mod-warning"
-					aria-label="Cancel subscription to destroy Relay Server."
-				>
-					Destroy
-				</button>
-			{:else}
-				<button class="mod-warning" on:click={debounce(handleDestroy)}>
-					Destroy
-				</button>
-			{/if}
+			<button class="mod-warning" on:click={debounce(handleDestroy)}>
+				Destroy
+			</button>
 		</SettingItem>
 	</SettingGroup>
 {/if}

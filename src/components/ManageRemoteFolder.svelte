@@ -104,37 +104,7 @@
 		}
 	});
 
-	async function handleUpgrade(relay: Relay) {
-		if (!plugin.loginManager?.user) {
-			return;
-		}
-		const payload = {
-			relay: relay.id,
-			quantity: 10,
-			user_email: plugin.loginManager.user.email,
-		};
-		const encodedPayload = btoa(JSON.stringify(payload))
-			.replace(/\+/g, "-")
-			.replace(/\//g, "_")
-			.replace(/=+$/, "");
-		window.open(
-			plugin.buildApiUrl(`/subscribe/${encodedPayload}?action="buy_storage"`),
-			"_blank",
-		);
-	}
-
-	let syncSettings: SyncSettingsManager | undefined =
-		$folderStore?.syncSettingsManager;
-
-	let noStorage = derived(
-		[folderStore, relayRoles],
-		([$folderStore, $relayRoles]) => {
-			return (
-				$relayRoles.find((role) => role.relay === $folderStore?.remote?.relay)
-					?.relay?.storageQuota?.quota === 0
-			);
-		},
-	);
+	let noStorage = writable(false);
 
 	// Type the entries
 	type CategoryEntry = [
@@ -572,18 +542,7 @@
 				</div>
 			</SlimSettingItem>
 		{/each}
-		{#if $noStorage && $relayStore}
-			<SlimSettingItem name="">
-				<button
-					class="mod-cta"
-					on:click={debounce(() => {
-						handleUpgrade($relayStore);
-					})}
-				>
-					Buy storage
-				</button>
-			</SlimSettingItem>
-		{/if}
+
 		</SettingGroup>
 	</div>
 {/if}
